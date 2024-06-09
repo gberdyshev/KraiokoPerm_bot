@@ -95,7 +95,7 @@ async def passport(message: types.Message, command: CommandObject):
 @dp.message(Command('check'))
 async def check(message: types.Message):
     if str(message.from_user.id) in cooldown_data:
-        delay = cooldown_data[str(message.from_user.id)] - int(time.time())
+        delay = int(time.time()) - cooldown_data[str(message.from_user.id)]
         if delay < 60:
             return await message.answer(f"Следующий запрос результатов можно будет выполнить через {60-delay} секунд")
     button_check = types.KeyboardButton(text='/check')
