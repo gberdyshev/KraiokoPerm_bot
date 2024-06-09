@@ -5,6 +5,7 @@ import lxml
 import sqlite3
 import hashlib
 import json
+import time
 
 from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
@@ -24,7 +25,7 @@ jsonconfig = load_config()
 
 bot = Bot(token=jsonconfig['TOKEN'])
 dp = Dispatcher()
-
+cooldown_data = dict()
 
 
 def kraioko_check(passp):
@@ -34,6 +35,8 @@ def kraioko_check(passp):
 
     params = {'ds': passp[:4], 'dn':passp[4:], 'rhash': rhash}
     r = requests.get('https://kraioko.perm.ru/utils/results/loadstudentresults.php', params=params)
+    if r.status_code != 200:
+        return 400
     result = r.content
    
     soup = BeautifulSoup(result, 'lxml')
@@ -91,6 +94,9 @@ async def passport(message: types.Message, command: CommandObject):
 
 @dp.message(Command('check'))
 async def check(message: types.Message):
+    delay = cooldown_data[str(message.from_user.id)] - int(time.time())
+    if delay < 60:
+        return await message.answer(f"Следующий запрос результатов можно будет выполнить через {60-delay} секунд")
     button_check = types.KeyboardButton(text='/check')
     kb = types.ReplyKeyboardMarkup(keyboard=[[button_check]], resize_keyboard=True)
     w = str(message.from_user.id).encode(encoding='UTF-8')  
@@ -106,10 +112,13 @@ async def check(message: types.Message):
     data = kraioko_check(res[0])
     if data is False:
         return await message.answer("Данные не найдены!")
+    if data == 400:
+        return await message.answer("Kraioko не отвечает.")
     for row in data:
         subj, mark, status, date = row
         text = text + "\n" + f"📗 <b>{subj}</b>: {mark} ({status}) {date}"
 
+    cooldown_data[str(message.from_user.id)] = int(time.time())
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
     
 
