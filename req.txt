@@ -1,0 +1,5 @@
+asyncio
+aiogram
+requests
+lxml
+bs4
