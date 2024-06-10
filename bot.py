@@ -26,6 +26,7 @@ jsonconfig = load_config()
 bot = Bot(token=jsonconfig['TOKEN'])
 dp = Dispatcher()
 cooldown_data = dict()
+cooldown_subscribe = dict()
 
 
 def kraioko_check(passp):
@@ -54,8 +55,58 @@ def kraioko_check(passp):
             data.append(new_row)
     return data
 
+def unpack_results(data) -> str:
+    text = ''
+    for row in data:
+        subj, mark, status, date = row
+        text = text + "\n" + f"📗 <b>{subj}</b>: {mark} ({status}) {date}"
+    return text
+
+def get_hash_user_id(id):
+    w = str(id).encode(encoding='UTF-8')  
+    hash_id = hashlib.sha256(w).hexdigest()
+    return hash_id
+
+def get_passp_from_user_id(id):
+    hash_id = get_hash_user_id(id)
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('select passport from users where tlg_id = ?', (hash_id, ))
+    res = cur.fetchone()
+    if res is None: return 0
+    return res[0] # возвращаем паспортные данные
+
+async def check_results():
+    notify_users = []
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('select * from notify')
+    res = cur.fetchall()
+    for row in res:
+        user_id, state, last_len, message_id = row
+        passp = get_passp_from_user_id(user_id)
+        if passp != 0:
+            data = kraioko_check(passp)
+            if data != False and data != 400:
+                if len(data) != last_len:
+                    cur.execute('update notify set last_len = ? where user = ?', (len(data), user_id))
+                    conn.commit()
+                    text_res = unpack_results(data)
+                    await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
+                    
+    
+                    
 
 
+
+    
+
+async def periodic(interval):
+    while True:
+        await check_results()
+        await asyncio.sleep(interval)
+        print("Запрос выполнен")
+        
 
 
 @dp.message(Command("start"))
@@ -76,13 +127,11 @@ async def passport(message: types.Message, command: CommandObject):
     if len(command.args) != 10:
         return await message.answer("Проверьте корректность введенных данных!")
 
-    w = str(message.from_user.id).encode(encoding='UTF-8')  
-    hash_id = hashlib.sha256(w).hexdigest()
+    res = get_passp_from_user_id(message.from_user.id)
+    hash_id = get_hash_user_id(message.from_user.id)
     conn = sqlite3.connect(__db_path__)
     cur = conn.cursor()
-    cur.execute('select passport from users where tlg_id = ?', (hash_id, ))
-    res = cur.fetchone()
-    if res is None:
+    if res == 0:
         cur.execute('insert into users VALUES (?,?)', (hash_id, command.args))
     else:
         cur.execute('update users set passport = ? where tlg_id = ?', (command.args, hash_id))
@@ -100,7 +149,42 @@ async def my_passport(message: types.Message):
     res = cur.fetchone()
     if res is None:
         return await message.answer("Вы еще не ввели паспортные данные!")
-    await message.answer(f"Пользователь: {message.from_user.full_name}\nПаспорт: {res[0]}")
+    cur.execute('select state from notify where user = ?', (str(message.from_user.id), ))
+    res2 = cur.fetchone()
+    if res2 is None: status = False
+    else: status = True
+    await message.answer(f"Пользователь: {message.from_user.full_name}\nПаспорт: {res[0]}\nПодписка: {status}")
+
+@dp.message(Command('subscribe'))
+async def subscribe(message: types.Message):
+    if str(message.from_user.id) in cooldown_subscribe:
+        delay = int(time.time()) - cooldown_subscribe[str(message.from_user.id)]
+        if delay < __cooldown__:
+            return await message.answer(f"Следующие действия с подпиской можно будет выполнить через {__cooldown__-delay} с.")
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    user_id = message.from_user.id
+    cur.execute('select state from notify where user = ?', (user_id, ))
+    res = cur.fetchone()
+    if res is None or res[0] == 0:
+        
+        doc = get_passp_from_user_id(user_id)
+        if doc == 0: return await message.answer("Вы еще не ввели паспортные данные!")
+        data = kraioko_check(doc)
+        if data == 400 or data == False: return message.answer("На текущий момент нет возможности подписаться на уведомления!")
+
+        cur.execute('insert into notify VALUES (?,?,?,?)', (user_id, 1, len(data), str(message.chat.id)))
+        await message.answer("Вы успешно подписались на уведомления!")
+    else:
+        cur.execute('delete from notify where user = ?', (user_id, ))
+        await message.answer("Вы успешно отписались от уведомлений!")
+
+    cooldown_subscribe[str(message.from_user.id)] = int(time.time())
+    conn.commit()
+    
+
+
+
 
 
 @dp.message(Command('check'))
@@ -120,23 +204,23 @@ async def check(message: types.Message):
     res = cur.fetchone()
     if res is None:
         await message.answer("Данные вашего паспорта не найдены. Добавьте их командой /passport")
-    text = ""
+    text = f"📖·<b>Результаты</b>·\n"
     data = kraioko_check(res[0])
     if data is False:
         return await message.answer("Данные не найдены!")
     if data == 400:
         return await message.answer("Kraioko не отвечает.")
-    for row in data:
-        subj, mark, status, date = row
-        text = text + "\n" + f"📗 <b>{subj}</b>: {mark} ({status}) {date}"
+    text = text + unpack_results(data)
 
-    cooldown_data[str(message.from_user.id)] = int(time.time())
+    cooldown_data[str(message.from_user.id)] = int(time.time()) 
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
     
 
 
 async def main():
+    task = asyncio.create_task(periodic(600))
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    
     asyncio.run(main())
