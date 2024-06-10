@@ -90,6 +90,17 @@ async def passport(message: types.Message, command: CommandObject):
     conn.close()
     await message.answer("Данные успешно добавлены!")
 
+@dp.message(Command('passport'))
+async def my_passport(message: types.Message):
+    w = str(message.from_user.id).encode(encoding='UTF-8')  
+    hash_id = hashlib.sha256(w).hexdigest()
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('select passport from users where tlg_id = ?', (hash_id, ))
+    res = cur.fetchone()
+    if res is None:
+        return await message.answer("Вы еще не ввели паспортные данные!")
+    await message.answer(f"Пользователь: {message.from_user.full_name}\nПаспорт: {res[0]}")
 
 
 @dp.message(Command('check'))
