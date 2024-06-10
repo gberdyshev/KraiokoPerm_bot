@@ -2,4 +2,5 @@ asyncio
 aiogram
 requests
 lxml
+logging
 bs4
