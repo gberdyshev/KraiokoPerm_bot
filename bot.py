@@ -13,6 +13,7 @@ from aiogram.filters.command import Command, CommandObject
 
 __db_path__ = './db/users.db'
 __cooldown__ = 60
+superusers = ['847454186']
 #logging.basicConfig(level=logging.INFO)
 
 def load_config():
@@ -30,30 +31,33 @@ cooldown_subscribe = dict()
 
 
 def kraioko_check(passp):
-    s = requests.get('https://kraioko.perm.ru/presults/').text
-    index_1 = s.find('rhash')
-    rhash = s[index_1+7:index_1+7+44]
+    try:
+        s = requests.get('https://kraioko.perm.ru/presults/', timeout=7).text
+        index_1 = s.find('rhash')
+        rhash = s[index_1+7:index_1+7+44]
 
-    params = {'ds': passp[:4], 'dn':passp[4:], 'rhash': rhash}
-    r = requests.get('https://kraioko.perm.ru/utils/results/loadstudentresults.php', params=params)
-    if r.status_code != 200:
+        params = {'ds': passp[:4], 'dn':passp[4:], 'rhash': rhash}
+        r = requests.get('https://kraioko.perm.ru/utils/results/loadstudentresults.php', params=params, timeout=7)
+        if r.status_code != 200:
+            return 400
+        result = r.content
+    
+        soup = BeautifulSoup(result, 'lxml')
+        data = []
+        table = soup.find('table')
+        if table is None:
+            return False
+        rows = table.find_all('tr')
+
+        for row in range(1, len(rows)):
+            new_row = []
+            for td in rows[row].find_all('td'):
+                new_row.append(td.text.strip())
+            if len(new_row) > 1:
+                data.append(new_row)
+        return data
+    except:
         return 400
-    result = r.content
-   
-    soup = BeautifulSoup(result, 'lxml')
-    data = []
-    table = soup.find('table')
-    if table is None:
-        return False
-    rows = table.find_all('tr')
-
-    for row in range(1, len(rows)):
-        new_row = []
-        for td in rows[row].find_all('td'):
-            new_row.append(td.text.strip())
-        if len(new_row) > 1:
-            data.append(new_row)
-    return data
 
 def unpack_results(data) -> str:
     text = ''
@@ -210,7 +214,23 @@ async def check(message: types.Message):
 
     cooldown_data[str(message.from_user.id)] = int(time.time()) 
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+@dp.message(Command('monitor'))
+async def monitor(message: types.Message):
+    if not (str(message.from_user.id) in superusers):
+        return await message.answer("Недостаточно прав для выполнения команды!")
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('select * from users')
+    users = cur.fetchall()
+    cur.execute('select * from notify')
+    notifiers = cur.fetchall()
+    resp = requests.get('https://kraioko.perm.ru', timeout=7)
+    totaltime = resp.elapsed.total_seconds()*1000
+    await message.answer(f"Kraioko отвечает за {totaltime} мс\nПользователей: {len(users)}\nС уведомлениями: {len(notifiers)}\n")
     
+
+
 
 
 async def main():
