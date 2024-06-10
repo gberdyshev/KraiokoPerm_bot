@@ -104,9 +104,13 @@ async def check_results():
                     
 
 async def periodic(interval):
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
     while True:
         await check_results()
-
+        cur.execute('select update_interval from config')
+        res = cur.fetchone()
+        interval = int(res[0])
         await asyncio.sleep(interval)
         
         
@@ -117,7 +121,9 @@ async def cmd_start(message: types.Message):
     helps = """Приветствую!
 Это бот для получения результатов с Kraioko.
 Перед началом использования необходимо добавить номер и серию паспорта командой /passport XXXXXXXXXX
-Затем для получения результатов используется команда /check"""
+Затем для получения результатов используется команда /check
+
+/subscribe - Подписаться на уведомления об изменении результатов"""
     buttons = [[types.KeyboardButton(text='/check')]]
     kb = types.ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
     await message.answer(helps, reply_markup=kb)
@@ -244,11 +250,26 @@ async def forced_update(message: types.Message):
     await check_results()
     await message.answer("[root] Принудительное обновление результатов выполнено")
 
+@dp.message(Command('change_update_interval'))
+async def change_update_interval(message: types.Message, command: CommandObject):
+    if not (str(message.from_user.id) in superusers):
+        return await message.answer("Недостаточно прав для выполнения команды!")
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('update config set update_interval = ?', (int(command.args),))
+    conn.commit()
+    await message.answer(f"[root] Установлен новый интервал обновления: {int(command.args)} с.")
+    
 
 
 
 async def main():
-    task = asyncio.create_task(periodic(600))
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('select update_interval from config')
+    res = cur.fetchone()
+    interval = int(res[0])
+    task = asyncio.create_task(periodic(interval))
     await dp.start_polling(bot)
 
 def create_tables():
@@ -260,6 +281,10 @@ def create_tables():
     cur.execute('select * from last_update')
     if cur.fetchone() is None:
         cur.execute('insert into last_update VALUES (0)')
+    cur.execute('CREATE TABLE if not exists config (update_interval INTEGER)')
+    cur.execute('select update_interval from config')
+    if cur.fetchone() is None:
+        cur.execute('insert into config VALUES (600)')
     conn.commit()
 
 if __name__ == "__main__":
