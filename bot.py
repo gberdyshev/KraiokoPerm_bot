@@ -13,6 +13,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandObject
 
 __db_path__ = 'db/users.db'
+__cooldown__ = 60
 logging.basicConfig(level=logging.INFO)
 
 def load_config():
@@ -96,8 +97,8 @@ async def passport(message: types.Message, command: CommandObject):
 async def check(message: types.Message):
     if str(message.from_user.id) in cooldown_data:
         delay = int(time.time()) - cooldown_data[str(message.from_user.id)]
-        if delay < 60:
-            return await message.answer(f"Следующий запрос результатов можно будет выполнить через {60-delay} секунд")
+        if delay < __cooldown__:
+            return await message.answer(f"Следующий запрос результатов можно будет выполнить через {__cooldown__-delay} с.")
     button_check = types.KeyboardButton(text='/check')
     kb = types.ReplyKeyboardMarkup(keyboard=[[button_check]], resize_keyboard=True)
     w = str(message.from_user.id).encode(encoding='UTF-8')  
