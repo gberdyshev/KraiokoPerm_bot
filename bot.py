@@ -97,10 +97,6 @@ async def check_results():
     
                     
 
-
-
-    
-
 async def periodic(interval):
     while True:
         await check_results()
@@ -221,6 +217,13 @@ async def main():
     task = asyncio.create_task(periodic(600))
     await dp.start_polling(bot)
 
+def create_tables():
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    cur.execute('CREATE TABLE if not exists users (tlg_id TEXT, passport TEXT)')
+    cur.execute('CREATE TABLE if not exists notify (user TEXT, state INTEGER, last_len INTEGER, message_id TEXT, PRIMARY KEY(user))')
+    conn.commit()
+
 if __name__ == "__main__":
-    
+    create_tables()
     asyncio.run(main())
