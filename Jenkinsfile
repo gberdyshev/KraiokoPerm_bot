@@ -6,7 +6,7 @@ pipeline {
     environment {
         SHORTHASH = "${sh(script:'git rev-parse --short HEAD', returnStdout: true).trim()}"
         CONTAINERNAME = "kraioko_cont"
-        IMAGENAME = "kraioko/kraioko_bot"
+        IMAGENAME = "kraioko_bot/bot"
         STORELEN = 10
     }
 
@@ -40,7 +40,7 @@ pipeline {
                     }
                 }
 
-                sh 'docker run -d --name $CONTAINERNAME -v /opt/kraioko/bot/db/:/usr/src/kraioko/db $IMAGENAME:$SHORTHASH'
+                sh 'docker run -d --name $CONTAINERNAME -v /opt/kraioko_bot/bot/db/:/usr/src/kraioko/db $IMAGENAME:$SHORTHASH'
 
                 echo "Container created!"
             }
