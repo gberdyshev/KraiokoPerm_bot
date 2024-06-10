@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import requests
 import lxml
 import sqlite3
@@ -12,9 +11,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandObject
 
-__db_path__ = 'db/users.db'
+__db_path__ = './db/users.db'
 __cooldown__ = 60
-logging.basicConfig(level=logging.INFO)
+#logging.basicConfig(level=logging.INFO)
 
 def load_config():
     """Загрузка конфигурации из JSON"""
