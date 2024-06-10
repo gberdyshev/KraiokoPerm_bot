@@ -90,7 +90,7 @@ async def passport(message: types.Message, command: CommandObject):
     conn.close()
     await message.answer("Данные успешно добавлены!")
 
-@dp.message(Command('passport'))
+@dp.message(Command('my_passport'))
 async def my_passport(message: types.Message):
     w = str(message.from_user.id).encode(encoding='UTF-8')  
     hash_id = hashlib.sha256(w).hexdigest()
