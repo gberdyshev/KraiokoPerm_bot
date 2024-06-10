@@ -5,6 +5,7 @@ import sqlite3
 import hashlib
 import json
 import time
+import datetime
 
 from bs4 import BeautifulSoup
 from aiogram import Bot, Dispatcher, types
@@ -97,15 +98,17 @@ async def check_results():
                     conn.commit()
                     text_res = unpack_results(data)
                     await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
-                    
+    cur.execute('update last_update set unixtime = ?', (int(time.time()), ))
+    conn.commit()                
     
                     
 
 async def periodic(interval):
     while True:
         await check_results()
+
         await asyncio.sleep(interval)
-        print("Запрос выполнен")
+        
         
 
 
@@ -227,8 +230,19 @@ async def monitor(message: types.Message):
     notifiers = cur.fetchall()
     resp = requests.get('https://kraioko.perm.ru', timeout=7)
     totaltime = resp.elapsed.total_seconds()*1000
-    await message.answer(f"Kraioko отвечает за {totaltime} мс\nПользователей: {len(users)}\nС уведомлениями: {len(notifiers)}\n")
+    cur.execute('select unixtime from last_update')
+    r = cur.fetchone()
+    last_update = (datetime.datetime.fromtimestamp(int(r[0]), datetime.UTC) \
+        + datetime.timedelta(hours=5, minutes=0)).strftime('%d-%m-%Y %H:%M:%S')
+    await message.answer(f"Kraioko отвечает за {totaltime} мс\nПользователей: {len(users)}\nС уведомлениями: {len(notifiers)}\n\
+        \nПоследнее обновление системы отслеживания: {last_update}")
     
+@dp.message(Command('forced_update'))
+async def forced_update(message: types.Message):
+    if not (str(message.from_user.id) in superusers):
+        return await message.answer("Недостаточно прав для выполнения команды!")
+    await check_results()
+    await message.answer("[root] Принудительное обновление результатов выполнено")
 
 
 
@@ -242,6 +256,10 @@ def create_tables():
     cur = conn.cursor()
     cur.execute('CREATE TABLE if not exists users (tlg_id TEXT, passport TEXT)')
     cur.execute('CREATE TABLE if not exists notify (user TEXT, state INTEGER, last_len INTEGER, message_id TEXT, PRIMARY KEY(user))')
+    cur.execute('CREATE TABLE if not exists last_update (unixtime text)')
+    cur.execute('select * from last_update')
+    if cur.fetchone() is None:
+        cur.execute('insert into last_update VALUES (0)')
     conn.commit()
 
 if __name__ == "__main__":
