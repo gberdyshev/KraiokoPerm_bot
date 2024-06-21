@@ -12,74 +12,20 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandObject
 
-__db_path__ = './db/users.db'
-__cooldown__ = 60
-superusers = ['847454186']
-#logging.basicConfig(level=logging.INFO)
+from func.config import __db_path__, __cooldown__, superusers, start_text, load_config, create_tables
+from func.kraioko_func import kraioko_check, unpack_results
+from func.utils import get_update_interval, get_hash_user_id, get_passp_from_user_id, get_subscribe_status
 
-def load_config():
-    """Загрузка конфигурации из JSON"""
-    json_config_file = './db/config.json'
-    with open(json_config_file, 'r') as file:
-        return json.load(file)
+from handlers import admin
 
-jsonconfig = load_config()
 
-bot = Bot(token=jsonconfig['TOKEN'])
-dp = Dispatcher()
 cooldown_data = dict()
 cooldown_subscribe = dict()
 
+bot = Bot(token=load_config()['TOKEN'])
+dp = Dispatcher()
 
-def kraioko_check(passp):
-    try:
-        s = requests.get('https://kraioko.perm.ru/presults/', timeout=7).text
-        index_1 = s.find('rhash')
-        rhash = s[index_1+7:index_1+7+44]
 
-        params = {'ds': passp[:4], 'dn':passp[4:], 'rhash': rhash}
-        r = requests.get('https://kraioko.perm.ru/utils/results/loadstudentresults.php', params=params, timeout=7)
-        if r.status_code != 200:
-            return 400
-        result = r.content
-    
-        soup = BeautifulSoup(result, 'lxml')
-        data = []
-        table = soup.find('table')
-        if table is None:
-            return False
-        rows = table.find_all('tr')
-
-        for row in range(1, len(rows)):
-            new_row = []
-            for td in rows[row].find_all('td'):
-                new_row.append(td.text.strip())
-            if len(new_row) > 1:
-                data.append(new_row)
-        return data
-    except:
-        return 400
-
-def unpack_results(data) -> str:
-    text = ''
-    for row in data:
-        subj, mark, status, date = row
-        text = text + "\n" + f"📗 <b>{subj}</b>: {mark} ({status}) {date}"
-    return text
-
-def get_hash_user_id(id):
-    w = str(id).encode(encoding='UTF-8')  
-    hash_id = hashlib.sha256(w).hexdigest()
-    return hash_id
-
-def get_passp_from_user_id(id):
-    hash_id = get_hash_user_id(id)
-    conn = sqlite3.connect(__db_path__)
-    cur = conn.cursor()
-    cur.execute('select passport from users where tlg_id = ?', (hash_id, ))
-    res = cur.fetchone()
-    if res is None: return 0
-    return res[0] # возвращаем паспортные данные
 
 async def check_results():
     notify_users = []
@@ -99,34 +45,19 @@ async def check_results():
                     text_res = unpack_results(data)
                     await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
     cur.execute('update last_update set unixtime = ?', (int(time.time()), ))
-    conn.commit()                
-    
-                    
+    conn.commit()    
 
 async def periodic(interval):
-    conn = sqlite3.connect(__db_path__)
-    cur = conn.cursor()
     while True:
         await check_results()
-        cur.execute('select update_interval from config')
-        res = cur.fetchone()
-        interval = int(res[0])
+        interval = get_update_interval()
         await asyncio.sleep(interval)
-        
-        
-
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    helps = """Приветствую!
-Это бот для получения результатов с Kraioko.
-Перед началом использования необходимо добавить номер и серию паспорта командой /passport XXXXXXXXXX
-Затем для получения результатов используется команда /check
-
-/subscribe - Подписаться на уведомления об изменении результатов"""
     buttons = [[types.KeyboardButton(text='/check')]]
     kb = types.ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
-    await message.answer(helps, reply_markup=kb)
+    await message.answer(start_text, reply_markup=kb)
 
 
 @dp.message(Command('passport'))
@@ -146,6 +77,10 @@ async def passport(message: types.Message, command: CommandObject):
         cur.execute('update users set passport = ? where tlg_id = ?', (command.args, hash_id))
     conn.commit()
     conn.close()
+    if get_subscribe_status(message.from_user.id):
+        await subscribe(message, False)
+        return await message.answer("Обновлены паспортные данные. Подписка на уведомления отлючена. Включить снова /subscribe")
+
     await message.answer("Данные успешно добавлены!")
 
 @dp.message(Command('my_passport'))
@@ -158,15 +93,12 @@ async def my_passport(message: types.Message):
     res = cur.fetchone()
     if res is None:
         return await message.answer("Вы еще не ввели паспортные данные!")
-    cur.execute('select state from notify where user = ?', (str(message.from_user.id), ))
-    res2 = cur.fetchone()
-    if res2 is None: status = False
-    else: status = True
+    status = get_subscribe_status(message.from_user.id)
     await message.answer(f"Пользователь: {message.from_user.full_name}\nПаспорт: {res[0]}\nПодписка: {status}")
 
 @dp.message(Command('subscribe'))
-async def subscribe(message: types.Message):
-    if str(message.from_user.id) in cooldown_subscribe:
+async def subscribe(message: types.Message, cooldown=True):
+    if str(message.from_user.id) in cooldown_subscribe and cooldown is True:
         delay = int(time.time()) - cooldown_subscribe[str(message.from_user.id)]
         if delay < __cooldown__:
             return await message.answer(f"Следующие действия с подпиской можно будет выполнить через {__cooldown__-delay} с.")
@@ -180,21 +112,17 @@ async def subscribe(message: types.Message):
         doc = get_passp_from_user_id(user_id)
         if doc == 0: return await message.answer("Вы еще не ввели паспортные данные!")
         data = kraioko_check(doc)
-        if data == 400 or data == False: return message.answer("На текущий момент нет возможности подписаться на уведомления!")
-
+        if data == 400: return message.answer("На текущий момент нет возможности подписаться на уведомления!")
+        if data is False: data = []
         cur.execute('insert into notify VALUES (?,?,?,?)', (user_id, 1, len(data), str(message.chat.id)))
         await message.answer("Вы успешно подписались на уведомления!")
     else:
         cur.execute('delete from notify where user = ?', (user_id, ))
         await message.answer("Вы успешно отписались от уведомлений!")
-
-    cooldown_subscribe[str(message.from_user.id)] = int(time.time())
+    if cooldown:
+        cooldown_subscribe[str(message.from_user.id)] = int(time.time())
     conn.commit()
     
-
-
-
-
 
 @dp.message(Command('check'))
 async def check(message: types.Message):
@@ -202,6 +130,8 @@ async def check(message: types.Message):
         delay = int(time.time()) - cooldown_data[str(message.from_user.id)]
         if delay < __cooldown__:
             return await message.answer(f"Следующий запрос результатов можно будет выполнить через {__cooldown__-delay} с.")
+    cooldown_data[str(message.from_user.id)] = int(time.time()) 
+
     button_check = types.KeyboardButton(text='/check')
     kb = types.ReplyKeyboardMarkup(keyboard=[[button_check]], resize_keyboard=True)
     w = str(message.from_user.id).encode(encoding='UTF-8')  
@@ -212,7 +142,7 @@ async def check(message: types.Message):
     cur.execute('select passport from users where tlg_id = ?', (hash_id, ))
     res = cur.fetchone()
     if res is None:
-        await message.answer("Данные вашего паспорта не найдены. Добавьте их командой /passport")
+        return await message.answer("Данные вашего паспорта не найдены. Добавьте их командой /passport")
     text = f"📖·<b>Результаты</b>·\n"
     data = kraioko_check(res[0])
     if data is False:
@@ -220,72 +150,23 @@ async def check(message: types.Message):
     if data == 400:
         return await message.answer("Kraioko не отвечает.")
     text = text + unpack_results(data)
+    #w = str(data).encode(encoding='UTF-8')  
+    #hash_id = hashlib.sha256(w).hexdigest()
+    #print(hash_id)
 
-    cooldown_data[str(message.from_user.id)] = int(time.time()) 
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
-
-@dp.message(Command('monitor'))
-async def monitor(message: types.Message):
-    if not (str(message.from_user.id) in superusers):
-        return await message.answer("Недостаточно прав для выполнения команды!")
-    conn = sqlite3.connect(__db_path__)
-    cur = conn.cursor()
-    cur.execute('select * from users')
-    users = cur.fetchall()
-    cur.execute('select * from notify')
-    notifiers = cur.fetchall()
-    resp = requests.get('https://kraioko.perm.ru', timeout=7)
-    totaltime = resp.elapsed.total_seconds()*1000
-    cur.execute('select unixtime from last_update')
-    r = cur.fetchone()
-    last_update = (datetime.datetime.fromtimestamp(int(r[0]), datetime.UTC) \
-        + datetime.timedelta(hours=5, minutes=0)).strftime('%d-%m-%Y %H:%M:%S')
-    await message.answer(f"Kraioko отвечает за {totaltime} мс\nПользователей: {len(users)}\nС уведомлениями: {len(notifiers)}\n\
-        \nПоследнее обновление системы отслеживания: {last_update}")
-    
-@dp.message(Command('forced_update'))
-async def forced_update(message: types.Message):
-    if not (str(message.from_user.id) in superusers):
-        return await message.answer("Недостаточно прав для выполнения команды!")
-    await check_results()
-    await message.answer("[root] Принудительное обновление результатов выполнено")
-
-@dp.message(Command('change_update_interval'))
-async def change_update_interval(message: types.Message, command: CommandObject):
-    if not (str(message.from_user.id) in superusers):
-        return await message.answer("Недостаточно прав для выполнения команды!")
-    conn = sqlite3.connect(__db_path__)
-    cur = conn.cursor()
-    cur.execute('update config set update_interval = ?', (int(command.args),))
-    conn.commit()
-    await message.answer(f"[root] Установлен новый интервал обновления: {int(command.args)} с.")
-    
-
 
 
 async def main():
-    conn = sqlite3.connect(__db_path__)
-    cur = conn.cursor()
-    cur.execute('select update_interval from config')
-    res = cur.fetchone()
-    interval = int(res[0])
+    dp.include_router(admin.router)
+    interval = get_update_interval()
     task = asyncio.create_task(periodic(interval))
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("Бот запущен")
     await dp.start_polling(bot)
+    
 
-def create_tables():
-    conn = sqlite3.connect(__db_path__)
-    cur = conn.cursor()
-    cur.execute('CREATE TABLE if not exists users (tlg_id TEXT, passport TEXT)')
-    cur.execute('CREATE TABLE if not exists notify (user TEXT, state INTEGER, last_len INTEGER, message_id TEXT, PRIMARY KEY(user))')
-    cur.execute('CREATE TABLE if not exists last_update (unixtime text)')
-    cur.execute('select * from last_update')
-    if cur.fetchone() is None:
-        cur.execute('insert into last_update VALUES (0)')
-    cur.execute('CREATE TABLE if not exists config (update_interval INTEGER)')
-    cur.execute('select update_interval from config')
-    if cur.fetchone() is None:
-        cur.execute('insert into config VALUES (600)')
-    conn.commit()
+
 
 if __name__ == "__main__":
     create_tables()
