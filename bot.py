@@ -34,18 +34,20 @@ async def check_results():
     cur.execute('select * from notify')
     res = cur.fetchall()
     for row in res:
-        user_id, state, last_len, message_id = row
+        user_id, state, last_len, message_id, last_hash = row
         passp = get_passp_from_user_id(user_id)
         if passp != 0:
             data = kraioko_check(passp)
+            w = str(data).encode(encoding='UTF-8')  
+            hash_res = hashlib.sha256(w).hexdigest()
             if data != False and data != 400:
-                if len(data) != last_len:
-                    cur.execute('update notify set last_len = ? where user = ?', (len(data), user_id))
+                if last_hash != hash_res:
+                    cur.execute('update notify set last_hash = ? where user = ?', (hash_res, user_id))
                     conn.commit()
                     text_res = unpack_results(data)
-                    await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
+                    #await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
     cur.execute('update last_update set unixtime = ?', (int(time.time()), ))
-    conn.commit()    
+    conn.commit()
 
 async def periodic(interval):
     while True:
@@ -107,14 +109,16 @@ async def subscribe(message: types.Message, cooldown=True):
     user_id = message.from_user.id
     cur.execute('select state from notify where user = ?', (user_id, ))
     res = cur.fetchone()
-    if res is None or res[0] == 0:
-        
+    if res is None or res[0] == 0:      
         doc = get_passp_from_user_id(user_id)
-        if doc == 0: return await message.answer("Вы еще не ввели паспортные данные!")
+        if doc == 0: 
+            return await message.answer("Вы еще не ввели паспортные данные!")
         data = kraioko_check(doc)
-        if data == 400: return message.answer("На текущий момент нет возможности подписаться на уведомления!")
-        if data is False: data = []
-        cur.execute('insert into notify VALUES (?,?,?,?)', (user_id, 1, len(data), str(message.chat.id)))
+        if data == 400: 
+            return message.answer("На текущий момент нет возможности подписаться на уведомления!")
+        w = str(data).encode(encoding='UTF-8')  
+        hash_res = hashlib.sha256(w).hexdigest()
+        cur.execute('insert into notify VALUES (?,?,?,?,?)', (user_id, 1, 0, str(message.chat.id), hash_res))
         await message.answer("Вы успешно подписались на уведомления!")
     else:
         cur.execute('delete from notify where user = ?', (user_id, ))
