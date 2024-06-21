@@ -25,7 +25,7 @@ def create_tables():
     conn = sqlite3.connect(__db_path__)
     cur = conn.cursor()
     cur.execute('CREATE TABLE if not exists users (tlg_id TEXT, passport TEXT)')
-    cur.execute('CREATE TABLE if not exists notify (user TEXT, state INTEGER, last_len INTEGER, message_id TEXT, PRIMARY KEY(user))')
+    cur.execute('CREATE TABLE if not exists notify (user TEXT, state INTEGER, last_len INTEGER, message_id TEXT, last_hash TEXT, PRIMARY KEY(user))')
     cur.execute('CREATE TABLE if not exists last_update (unixtime text)')
     cur.execute('select * from last_update')
     if cur.fetchone() is None:
