@@ -45,7 +45,7 @@ async def check_results():
                     cur.execute('update notify set last_hash = ? where user = ?', (hash_res, user_id))
                     conn.commit()
                     text_res = unpack_results(data)
-                    #await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
+                    await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
     cur.execute('update last_update set unixtime = ?', (int(time.time()), ))
     conn.commit()
 
