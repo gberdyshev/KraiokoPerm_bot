@@ -3,15 +3,18 @@ import lxml
 
 from bs4 import BeautifulSoup
 
+KRAIOKO_URL = 'https://kraioko.perm.ru/presults/'
+KRAIOKO_RES_SCRIPT_URL = 'https://kraioko.perm.ru/utils/results/loadstudentresults.php'
+
 # Основная функция проверки результатов по паспортным данным
 def kraioko_check(passp):
     try:
-        s = requests.get('https://kraioko.perm.ru/presults/', timeout=7).text
+        s = requests.get(KRAIOKO_URL, timeout=7).text
         index_1 = s.find('rhash')
         rhash = s[index_1+7:index_1+7+44]
 
         params = {'ds': passp[:4], 'dn':passp[4:], 'rhash': rhash}
-        r = requests.get('https://kraioko.perm.ru/utils/results/loadstudentresults.php', params=params, timeout=7)
+        r = requests.get(KRAIOKO_RES_SCRIPT_URL, params=params, timeout=7)
         if r.status_code != 200:
             return 400
         result = r.content
@@ -34,7 +37,7 @@ def kraioko_check(passp):
         return 400
 
 # Функция распаковки результатов из списка
-def unpack_results(data) -> str:
+def unpack_results(data) -> str:    
     text = ''
     for row in data:
         subj, mark, status, date = row
