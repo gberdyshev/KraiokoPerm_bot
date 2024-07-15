@@ -160,6 +160,19 @@ async def check(message: types.Message):
 
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
 
+@dp.message(Command('refusal'))
+async def refusal(message: types.Message):
+    conn = sqlite3.connect(__db_path__)
+    cur = conn.cursor()
+    user_id = message.from_user.id
+    hash_user_id = get_hash_user_id(user_id)
+    cur.execute('delete from notify where user = ?', (user_id, ))
+    cur.execute('delete from users where tlg_id = ?', (hash_user_id, ))
+    conn.commit()
+    await message.answer("Ваши паспортные данные были удалены из базы данных.")
+    
+
+
 
 async def main():
     dp.include_router(admin.router)

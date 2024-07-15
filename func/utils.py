@@ -1,7 +1,9 @@
 import sqlite3
 import hashlib
+import random
 
 from func.config import __db_path__
+from func.useragents import useragents
 
 # Получение интервала обновления из БД
 def get_update_interval() -> int:
@@ -27,6 +29,7 @@ def get_passp_from_user_id(id):
     if res is None: return 0
     return res[0] # возвращаем паспортные данные
 
+# Получить статус подписки у пользователя
 def get_subscribe_status(user_id) -> bool:
     conn = sqlite3.connect(__db_path__)
     cur = conn.cursor()
@@ -35,3 +38,8 @@ def get_subscribe_status(user_id) -> bool:
     if res is None: status = False
     else: status = True
     return status
+
+# Получить User-Agent из списка
+def get_user_agent() -> str:
+    return random.shuffle(useragents)
+    

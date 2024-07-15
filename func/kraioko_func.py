@@ -1,19 +1,21 @@
 import requests
 import lxml
 
+from func.utils import get_user_agent
 from bs4 import BeautifulSoup
 
-KRAIOKO_URL = 'https://kraioko.perm.ru/presults/'
+KRAIOKO_URL = 'https://kraioko.perm.ru/?oper=presults'
 KRAIOKO_RES_SCRIPT_URL = 'https://kraioko.perm.ru/utils/results/loadstudentresults.php'
 
 # Основная функция проверки результатов по паспортным данным
 def kraioko_check(passp):
     try:
         s = requests.Session()
-        r = s.get(KRAIOKO_URL, timeout=7)        
-        params = s.cookies.get_dict()
-        params |= {'ds': passp[:4], 'dn':passp[4:]}
-        r = requests.get(KRAIOKO_RES_SCRIPT_URL, params=params, timeout=7)
+        headers = {'User-Agent': get_user_agent()}
+        r = s.get(KRAIOKO_URL, timeout=7, headers=headers)
+        cookies = s.cookies.get_dict()       
+        params = {'ds': passp[:4], 'dn':passp[4:], 'rhash': cookies['rtoken'], 'computerid': cookies['computerid']}
+        r = s.post(KRAIOKO_RES_SCRIPT_URL, data=params, timeout=7, headers=headers)
         if r.status_code != 200:
             return 400
         result = r.content
@@ -39,7 +41,6 @@ def kraioko_check(passp):
         return data
     except:
         return 400
-
 
 # Функция распаковки результатов из списка
 def unpack_results(data) -> str:    
