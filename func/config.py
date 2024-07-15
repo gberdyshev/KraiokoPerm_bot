@@ -27,6 +27,7 @@ def create_tables():
     cur.execute('CREATE TABLE if not exists users (tlg_id TEXT, passport TEXT)')
     cur.execute('CREATE TABLE if not exists notify (user TEXT, state INTEGER, last_len INTEGER, message_id TEXT, last_hash TEXT, PRIMARY KEY(user))')
     cur.execute('CREATE TABLE if not exists last_update (unixtime text)')
+    cur.execute('CREATE TABLE if not exists computerid (computerid text)')
     cur.execute('select * from last_update')
     if cur.fetchone() is None:
         cur.execute('insert into last_update VALUES (0)')
@@ -35,3 +36,4 @@ def create_tables():
     if cur.fetchone() is None:
         cur.execute('insert into config VALUES (600)')
     conn.commit()
+

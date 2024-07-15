@@ -13,7 +13,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters.command import Command, CommandObject
 
 from func.config import __db_path__, __cooldown__, superusers, start_text, load_config, create_tables
-from func.kraioko_func import kraioko_check, unpack_results
+from func.kraioko_func import kraioko_check, unpack_results, get_computerid_firstrun
 from func.utils import get_update_interval, get_hash_user_id, get_passp_from_user_id, get_subscribe_status
 
 from handlers import admin
@@ -187,4 +187,5 @@ async def main():
 
 if __name__ == "__main__":
     create_tables()
+    get_computerid_firstrun()
     asyncio.run(main())
