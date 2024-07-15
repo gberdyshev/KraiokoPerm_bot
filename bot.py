@@ -46,6 +46,7 @@ async def check_results():
                     conn.commit()
                     text_res = unpack_results(data)
                     await bot.send_message(chat_id=message_id, text="✅ Изменения в результатах!"+ text_res, parse_mode=ParseMode.HTML)
+        await asyncio.sleep(1)
     cur.execute('update last_update set unixtime = ?', (int(time.time()), ))
     conn.commit()
 

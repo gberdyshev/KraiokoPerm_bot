@@ -28,9 +28,14 @@ def kraioko_check(passp):
         r = s.post(KRAIOKO_RES_SCRIPT_URL, data=params, timeout=7, cookies=compid_cookies)
         if r.status_code != 200:
             return 400
+        
         result = r.content
     
         soup = BeautifulSoup(result, 'xml', from_encoding='utf-8')
+        msg = soup.find('resultmsg').text
+        if msg != 'OK':
+            get_computerid_firstrun()
+            return kraioko_check(passp)
         k = soup.find('tabletext')
         k = str(k).replace('&lt;', '<').replace('&gt;', '>')
 
