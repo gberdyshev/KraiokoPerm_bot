@@ -2,6 +2,8 @@
 # Kraioko Perm Telegram Bot
 **[@kraioko_results_bot](https://t.me/kraioko_results_bot)**
 
+[Статья на Хабр](https://habr.com/ru/articles/828624/)
+
 **! Бот отключен до следующего года (в связи с окончанием основных периодов ГИА 2024)**
 
 Данный бот предназначен для получения результатов ГИА с сайта Kraioko.
